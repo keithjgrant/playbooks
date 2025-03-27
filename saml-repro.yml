@@ -1,0 +1,213 @@
+---
+- name: 'SAML reproducer'
+  hosts: 'localhost'
+  gather_facts: 'false'
+  vars:
+    gateway_hostname: 'gateway.example.com'
+    gateway_validate_certs: true
+    gateway_username: 'admin'
+    gateway_password: 'password'
+    openssl_private_key_path: '/tmp/key.pem'
+    openssl_public_key_path: '/tmp/cert.pem'
+    openssl_csr_path: '/tmp/csr.pem'
+    org_mapping_enable: true  # whether to create/delete org mappings
+    org_mapping_count: 50  # how many org mappings should be created
+    org_mapping_state: 'present'  # present for creating org maps, absent for removing org mappings
+    team_mapping_enable: false  # whether to create/delete team mappings
+    team_mapping_count: 20  # how many team mappings should be created
+    team_mapping_state: 'present'  # present for creating team maps, absent for removing team mappings
+    
+  tasks:
+    - name: 'Generate a private key'
+      community.crypto.openssl_privatekey:
+        path: '{{ openssl_private_key_path }}'
+        size: 2048
+
+    - name: 'Generate a CSR'
+      community.crypto.openssl_csr:
+        path: '{{ openssl_csr_path }}'
+        privatekey_path: '{{ openssl_private_key_path }}'
+        common_name: '{{ gateway_hostname }}'
+
+    - name: 'Generate a Self Signed OpenSSL certificate'
+      community.crypto.x509_certificate:
+        path: '{{ openssl_public_key_path }}'
+        privatekey_path: '{{ openssl_private_key_path }}'
+        csr_path: '{{ openssl_csr_path }}'
+        provider: 'selfsigned'
+
+    - name: 'Create SAML authenticator'
+      ansible.platform.authenticator:
+        gateway_hostname: '{{ gateway_hostname }}'
+        gateway_username: '{{ gateway_username }}'
+        gateway_password: '{{ gateway_password }}' 
+        gateway_validate_certs: '{{ gateway_validate_certs }}'
+        name: 'SAML'
+        enabled: true
+        configuration: {
+          'EXTRA_DATA': [],
+          'IDP_ATTR_EMAIL': 'name_id',
+          'IDP_ATTR_FIRST_NAME': 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname',
+          'IDP_ATTR_LAST_NAME': 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname',
+          'IDP_ATTR_USERNAME': 'name_id',
+          'IDP_ATTR_USER_PERMANENT_ID': 'name_id',
+          'IDP_ENTITY_ID': 'some text',
+          'IDP_URL': 'https://localhost',
+          'IDP_X509_CERT': "{{ lookup('ansible.builtin.file', openssl_public_key_path) }}",
+          'ORG_INFO': {
+            'en-US': {
+              'url': 'https://{{ gateway_hostname }}',
+              'name': 'AAP',
+              'displayname': 'AAP'
+            }
+          },
+          'SECURITY_CONFIG': {
+            'requestedAuthnContext': false
+          },
+          'SP_ENTITY_ID': 'https://{{ gateway_hostname }}',
+          'SP_EXTRA': {},
+          'SP_PRIVATE_KEY': "{{ lookup('ansible.builtin.file', openssl_private_key_path) }}",
+          'SP_PUBLIC_CERT': "{{ lookup('ansible.builtin.file', openssl_public_key_path) }}",
+          'SUPPORT_CONTACT': {
+            'givenName': 'Bob'
+            'emailAddress': 'bob@example.com'
+          },
+          'TECHNICAL_CONTACT': {
+            'givenName': 'Alice'
+            'emailAddress': 'alice@example.com'
+          }
+        }
+        type: 'ansible_base.authentication.authenticator_plugins.saml'
+        create_objects: false
+
+    - name: 'Block: Create/Delete Organization mappings'
+      when: 'org_mapping_enable'
+      block:
+
+        - name: 'Create/Delete SAML Organization mappings'
+          ansible.platform.authenticator_map:
+            gateway_hostname: '{{ gateway_hostname }}'
+            gateway_username: '{{ gateway_username }}'
+            gateway_password: '{{ gateway_password }}' 
+            gateway_validate_certs: '{{ gateway_validate_certs }}'
+            name: 'map-org-{{ __t_org }}'
+            authenticator: 'SAML'
+            map_type: 'organization'
+            organization: 'org-{{ __t_org }}'
+            role: 'Organization Admin'
+            revoke: true
+            triggers: {
+              'groups': {
+                'has_or': [
+                   'grp-{{ __t_org }}'
+                 ]
+              }
+            }
+            state: '{{ org_mapping_state }}'
+          changed_when: false
+          loop: '{{ range(1, org_mapping_count + 1) }}'
+          async: 3600
+          poll: 0
+          register: '__t_org_mapping_job'
+          loop_control:
+            loop_var: '__t_org'
+            label: 'map-org-{{ __t_org }}'
+
+        - name: 'Wait for the Organization Mappings to create/delete'
+          ansible.builtin.async_status:
+            jid: '{{ __t_org_mapping.ansible_job_id }}'
+          register: '__t_async_result_org_mapping'
+          until: '__t_async_result_org_mapping.finished'
+          retries: 100
+          loop: '{{  __t_org_mapping_job.results }}'
+          loop_control:
+            loop_var: '__t_org_mapping'
+
+    - name: 'Block: Create/Delete Team mappings'
+      when: 'team_mapping_enable'
+      block:
+
+        - name: 'Create/Delete SAML Team mappings'
+          ansible.platform.authenticator_map:
+            gateway_hostname: '{{ gateway_hostname }}'
+            gateway_username: '{{ gateway_username }}'
+            gateway_password: '{{ gateway_password }}' 
+            gateway_validate_certs: '{{ gateway_validate_certs }}'
+            name: 'map-team-{{ __t_team }}'
+            authenticator: 'SAML'
+            map_type: 'team'
+            team: '{{ __t_team }}'
+            organization: 'org-{{ __t_team }}'
+            role: 'Team Member'
+            revoke: true
+            triggers: {
+              'groups': {
+                'has_or': [
+                  'team-{{ __t_team }}'
+                ]
+              }
+            }
+            state: '{{ team_mapping_state }}'
+          changed_when: false
+          loop: '{{ range(1, team_mapping_count + 1) }}'
+          async: 3600
+          poll: 0
+          register: '__t_team_mapping_job'
+          loop_control:
+            loop_var: '__t_team'
+            label: 'map-team-{{ __t_team }}'
+
+        - name: 'Wait for the Team Mappings to create/delete'
+          ansible.builtin.async_status:
+            jid: '{{ __t_team_mapping.ansible_job_id }}'
+          register: '__t_async_result_team_mapping'
+          until: '__t_async_result_team_mapping.finished'
+          retries: 100
+          loop: '{{  __t_team_mapping_job.results }}'
+          loop_control:
+            loop_var: '__t_team_mapping'
+
+    - name: 'Retrieve all mappings from the API'
+      ansible.builtin.set_fact:
+        __t_mappings: >-
+          {{
+            lookup(
+              'ansible.platform.gateway_api',
+              'authenticator_maps',
+              host=gateway_hostname,
+              username=gateway_username,
+              password=gateway_password,
+              verify_ssl=gateway_validate_certs,
+              return_all=true,
+              max_objects=999999
+            )
+          }}
+
+    - name: 'Ensure all Organization mappings exist in the API'
+      ansible.builtin.assert:
+        that:
+          - >-
+            __t_mappings |
+            selectattr('name', '==', 'map-org-' ~ __t_org)
+        success_msg: 'Organization mapping exists: map-org-{{ __t_org }}'
+        fail_msg: 'Organization mapping does not exists: map-org-{{ __t_org }}'
+      loop: '{{ range(1, org_mapping_count + 1) }}'
+      loop_control:
+        loop_var: '__t_org'
+        label: 'map-org-{{ __t_org }}'
+      when: 'org_mapping_enable'
+
+    - name: 'Ensure all Team mappings exist in the API'
+      ansible.builtin.assert:
+        that:
+          - >-
+            __t_mappings |
+            selectattr('name', '==', 'map-team-' ~ __t_team)
+        success_msg: 'Team mapping exists: map-team-{{ __t_team }}'
+        fail_msg: 'Team mapping does not exists: map-team-{{ __t_team }}'
+      loop: '{{ range(1, team_mapping_count + 1) }}'
+      loop_control:
+        loop_var: '__t_team'
+        label: 'map-team-{{ __t_team }}'
+      when: 'team_mapping_enable'
+...
