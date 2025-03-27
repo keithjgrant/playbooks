@@ -10,13 +10,13 @@
     openssl_private_key_path: '/tmp/key.pem'
     openssl_public_key_path: '/tmp/cert.pem'
     openssl_csr_path: '/tmp/csr.pem'
-    org_mapping_enable: true  # whether to create/delete org mappings
-    org_mapping_count: 50  # how many org mappings should be created
-    org_mapping_state: 'present'  # present for creating org maps, absent for removing org mappings
-    team_mapping_enable: false  # whether to create/delete team mappings
-    team_mapping_count: 20  # how many team mappings should be created
-    team_mapping_state: 'present'  # present for creating team maps, absent for removing team mappings
-    
+    org_mapping_enable: true # whether to create/delete org mappings
+    org_mapping_count: 50 # how many org mappings should be created
+    org_mapping_state: 'present' # present for creating org maps, absent for removing org mappings
+    team_mapping_enable: false # whether to create/delete team mappings
+    team_mapping_count: 20 # how many team mappings should be created
+    team_mapping_state: 'present' # present for creating team maps, absent for removing team mappings
+
   tasks:
     - name: 'Generate a private key'
       community.crypto.openssl_privatekey:
@@ -40,55 +40,51 @@
       ansible.platform.authenticator:
         gateway_hostname: '{{ gateway_hostname }}'
         gateway_username: '{{ gateway_username }}'
-        gateway_password: '{{ gateway_password }}' 
+        gateway_password: '{{ gateway_password }}'
         gateway_validate_certs: '{{ gateway_validate_certs }}'
         name: 'SAML'
         enabled: true
-        configuration: {
-          'EXTRA_DATA': [],
-          'IDP_ATTR_EMAIL': 'name_id',
-          'IDP_ATTR_FIRST_NAME': 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname',
-          'IDP_ATTR_LAST_NAME': 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname',
-          'IDP_ATTR_USERNAME': 'name_id',
-          'IDP_ATTR_USER_PERMANENT_ID': 'name_id',
-          'IDP_ENTITY_ID': 'some text',
-          'IDP_URL': 'https://localhost',
-          'IDP_X509_CERT': "{{ lookup('ansible.builtin.file', openssl_public_key_path) }}",
-          'ORG_INFO': {
-            'en-US': {
-              'url': 'https://{{ gateway_hostname }}',
-              'name': 'AAP',
-              'displayname': 'AAP'
-            }
-          },
-          'SECURITY_CONFIG': {
-            'requestedAuthnContext': false
-          },
-          'SP_ENTITY_ID': 'https://{{ gateway_hostname }}',
-          'SP_EXTRA': {},
-          'SP_PRIVATE_KEY': "{{ lookup('ansible.builtin.file', openssl_private_key_path) }}",
-          'SP_PUBLIC_CERT': "{{ lookup('ansible.builtin.file', openssl_public_key_path) }}",
-          'SUPPORT_CONTACT': {
-            'givenName': 'Bob'
-            'emailAddress': 'bob@example.com'
-          },
-          'TECHNICAL_CONTACT': {
-            'givenName': 'Alice'
-            'emailAddress': 'alice@example.com'
+        configuration:
+          {
+            'EXTRA_DATA': [],
+            'IDP_ATTR_EMAIL': 'name_id',
+            'IDP_ATTR_FIRST_NAME': 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname',
+            'IDP_ATTR_LAST_NAME': 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname',
+            'IDP_ATTR_USERNAME': 'name_id',
+            'IDP_ATTR_USER_PERMANENT_ID': 'name_id',
+            'IDP_ENTITY_ID': 'some text',
+            'IDP_URL': 'https://localhost',
+            'IDP_X509_CERT': "{{ lookup('ansible.builtin.file', openssl_public_key_path) }}",
+            'ORG_INFO':
+              {
+                'en-US':
+                  {
+                    'url': 'https://{{ gateway_hostname }}',
+                    'name': 'AAP',
+                    'displayname': 'AAP',
+                  },
+              },
+            'SECURITY_CONFIG': { 'requestedAuthnContext': false },
+            'SP_ENTITY_ID': 'https://{{ gateway_hostname }}',
+            'SP_EXTRA': {},
+            'SP_PRIVATE_KEY': "{{ lookup('ansible.builtin.file', openssl_private_key_path) }}",
+            'SP_PUBLIC_CERT': "{{ lookup('ansible.builtin.file', openssl_public_key_path) }}",
+            'SUPPORT_CONTACT':
+              { 'givenName': 'Bob', 'emailAddress': 'bob@example.com' },
+            'TECHNICAL_CONTACT':
+              { 'givenName': 'Alice', 'emailAddress': 'alice@example.com' },
           }
-        }
         type: 'ansible_base.authentication.authenticator_plugins.saml'
         create_objects: false
 
     - name: 'Block: Create/Delete Organization mappings'
       when: 'org_mapping_enable'
       block:
-
         - name: 'Create/Delete SAML Organization mappings'
           ansible.platform.authenticator_map:
             gateway_hostname: '{{ gateway_hostname }}'
             gateway_username: '{{ gateway_username }}'
-            gateway_password: '{{ gateway_password }}' 
+            gateway_password: '{{ gateway_password }}'
             gateway_validate_certs: '{{ gateway_validate_certs }}'
             name: 'map-org-{{ __t_org }}'
             authenticator: 'SAML'
@@ -96,13 +92,7 @@
             organization: 'org-{{ __t_org }}'
             role: 'Organization Admin'
             revoke: true
-            triggers: {
-              'groups': {
-                'has_or': [
-                   'grp-{{ __t_org }}'
-                 ]
-              }
-            }
+            triggers: { 'groups': { 'has_or': ['grp-{{ __t_org }}'] } }
             state: '{{ org_mapping_state }}'
           changed_when: false
           loop: '{{ range(1, org_mapping_count + 1) }}'
@@ -126,12 +116,11 @@
     - name: 'Block: Create/Delete Team mappings'
       when: 'team_mapping_enable'
       block:
-
         - name: 'Create/Delete SAML Team mappings'
           ansible.platform.authenticator_map:
             gateway_hostname: '{{ gateway_hostname }}'
             gateway_username: '{{ gateway_username }}'
-            gateway_password: '{{ gateway_password }}' 
+            gateway_password: '{{ gateway_password }}'
             gateway_validate_certs: '{{ gateway_validate_certs }}'
             name: 'map-team-{{ __t_team }}'
             authenticator: 'SAML'
@@ -140,13 +129,7 @@
             organization: 'org-{{ __t_team }}'
             role: 'Team Member'
             revoke: true
-            triggers: {
-              'groups': {
-                'has_or': [
-                  'team-{{ __t_team }}'
-                ]
-              }
-            }
+            triggers: { 'groups': { 'has_or': ['team-{{ __t_team }}'] } }
             state: '{{ team_mapping_state }}'
           changed_when: false
           loop: '{{ range(1, team_mapping_count + 1) }}'
@@ -210,4 +193,3 @@
         loop_var: '__t_team'
         label: 'map-team-{{ __t_team }}'
       when: 'team_mapping_enable'
-...
