@@ -18,23 +18,23 @@
     team_mapping_state: 'present' # present for creating team maps, absent for removing team mappings
 
   tasks:
-    - name: 'Generate a private key'
-      community.crypto.openssl_privatekey:
-        path: '{{ openssl_private_key_path }}'
-        size: 2048
+    # - name: 'Generate a private key'
+    #   community.crypto.openssl_privatekey:
+    #     path: '{{ openssl_private_key_path }}'
+    #     size: 2048
 
-    - name: 'Generate a CSR'
-      community.crypto.openssl_csr:
-        path: '{{ openssl_csr_path }}'
-        privatekey_path: '{{ openssl_private_key_path }}'
-        common_name: '{{ gateway_hostname }}'
+    # - name: 'Generate a CSR'
+    #   community.crypto.openssl_csr:
+    #     path: '{{ openssl_csr_path }}'
+    #     privatekey_path: '{{ openssl_private_key_path }}'
+    #     common_name: '{{ gateway_hostname }}'
 
-    - name: 'Generate a Self Signed OpenSSL certificate'
-      community.crypto.x509_certificate:
-        path: '{{ openssl_public_key_path }}'
-        privatekey_path: '{{ openssl_private_key_path }}'
-        csr_path: '{{ openssl_csr_path }}'
-        provider: 'selfsigned'
+    # - name: 'Generate a Self Signed OpenSSL certificate'
+    #   community.crypto.x509_certificate:
+    #     path: '{{ openssl_public_key_path }}'
+    #     privatekey_path: '{{ openssl_private_key_path }}'
+    #     csr_path: '{{ openssl_csr_path }}'
+    #     provider: 'selfsigned'
 
     - name: 'Create SAML authenticator'
       ansible.platform.authenticator:
